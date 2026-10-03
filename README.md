@@ -1,15 +1,13 @@
 # GridPlayer Mod
 
-> **本仓库是 [GridPlayer](https://github.com/vzhd1701/gridplayer) 的修改版**（上游为 GPL-3.0-or-later）。
-> 自 **2026-10** 起在上游 0.5.5 的基础上修改；改动内容见下方「与原版的差异」，被修改的上游文件均以 `# MOD:` 注释标出，新增文件在文件头注明。
-> 本修改版同样以 **GPL-3.0** 发布，完整许可见 [LICENSE](LICENSE)。
-
 > 本项目是 [GridPlayer](https://github.com/vzhd1701/gridplayer) **0.5.5** 的修改版，
 > 按 **GNU GPL v3.0 或更高版本**（GPL-3.0-or-later）发布。
 > 上游版权归 [vzhd1701](https://github.com/vzhd1701) 所有。
+> 自 **2026-10** 起在上游 0.5.5 基础上修改。
 >
 > This is a modified fork of GridPlayer 0.5.5, released under the GPL-3.0-or-later,
-> the same license as upstream. All changes are marked in the source with `# MOD:`.
+> the same license as upstream. Modified from upstream 0.5.5 since **2026-10**;
+> all changes are marked in the source with `# MOD:`.
 
 在 VLC 之上同时播放多个视频的播放器 —— 上游已有的能力这里都有，下面只讲**这个版本多出来的东西**。
 
