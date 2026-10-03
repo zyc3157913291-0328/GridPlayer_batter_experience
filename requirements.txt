@@ -1,0 +1,21 @@
+# Runtime dependencies for running this modified GridPlayer from source.
+#
+# Mirrors the [project] dependencies block of upstream's pyproject.toml, so a
+# checkout here matches what upstream 0.5.5 declares. Prefer that file if you
+# are packaging; this list is for "clone and run".
+#
+# python-vlc is NOT listed: it is vendored inside the package as
+# gridplayer/vlc_player/vlc.py, and it finds libvlc through the
+# PYTHON_VLC_LIB_PATH / PYTHON_VLC_MODULE_PATH environment variables.
+#
+# Python 3.10 or later, as upstream requires. Developed against 3.13.
+
+PyQt5==5.15.11
+PyQt5-Qt5==5.15.2 ; sys_platform == "win32"
+PyQt5-Qt5==5.15.19 ; sys_platform != "win32"
+pydantic>=2.12.5,<3.0.0
+pydantic-extra-types>=2.10.6,<3.0.0
+streamlink>=8.4.0,<9.0.0
+yt-dlp[default]>=2026.07.04,<2027.0.0
+pyobjc-core ; sys_platform == "darwin"
+pyobjc-framework-Cocoa ; sys_platform == "darwin"

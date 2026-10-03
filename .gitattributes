@@ -1,0 +1,16 @@
+# Pin line endings in the repository.
+#
+# Upstream standardises on LF - its ruff config sets `line-ending = "lf"`, and
+# all 134 of its source files are LF. This machine's git has core.autocrlf=true,
+# which would check those files out as CRLF and turn every later edit into a
+# whole-file diff. Saying it here overrides that for everyone.
+
+* text=auto eol=lf
+
+# Binaries: never touch their contents.
+*.png binary
+*.jpg binary
+*.ico binary
+*.dll binary
+*.exe binary
+*.pyd binary
