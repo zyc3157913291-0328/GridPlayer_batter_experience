@@ -609,12 +609,12 @@ class VideoBlock(QWidget):
         return QRect(host.mapToGlobal(QPoint(0, 0)), host.size())
 
     def _speed_indicator_rect(self):
-        ""Where the speed readout goes.
+        """Where the speed readout goes.
 
         A gesture that takes in every video (Ctrl) keeps the readout over the whole
         video area, so it does not jump between cells while the pointer moves. A
         gesture on one video puts it over that video, in the same relative spot.
-        ""
+        """
         if self._long_press_ctrl:
             return self._video_area_rect()
 
