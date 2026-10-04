@@ -578,7 +578,7 @@ class VideoBlock(QWidget):
             block.set_rate(rate, is_silent=True)
 
         self.overlay.speed_indicator.rate = rate
-        self.overlay.speed_indicator.show_at(self._video_area_rect())
+        self.overlay.speed_indicator.show_at(self._speed_indicator_rect())
 
     def _end_speed_drag(self):
         if self._speed_drag is None:
@@ -607,6 +607,18 @@ class VideoBlock(QWidget):
             return QRect(self.mapToGlobal(QPoint(0, 0)), self.size())
 
         return QRect(host.mapToGlobal(QPoint(0, 0)), host.size())
+
+    def _speed_indicator_rect(self):
+        ""Where the speed readout goes.
+
+        A gesture that takes in every video (Ctrl) keeps the readout over the whole
+        video area, so it does not jump between cells while the pointer moves. A
+        gesture on one video puts it over that video, in the same relative spot.
+        ""
+        if self._long_press_ctrl:
+            return self._video_area_rect()
+
+        return QRect(self.mapToGlobal(QPoint(0, 0)), self.size())
 
     def _video_area_width(self):
         width = self._video_area_rect().width()

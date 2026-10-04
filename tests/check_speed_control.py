@@ -274,4 +274,12 @@ c.check(
     "every redundant call makes VLC re-clock its audio output and drop the sound",
 )
 
+c.check(
+    "the readout follows the gesture's scope",
+    "if self._long_press_ctrl:" in block_src
+    and "return self._video_area_rect()" in block_src
+    and "show_at(self._speed_indicator_rect())" in block_src,
+    "one video -> over that video; Ctrl -> over the whole area",
+)
+
 c.finish()
