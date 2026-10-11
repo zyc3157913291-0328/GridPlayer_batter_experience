@@ -124,11 +124,18 @@ class WindowStateManager(ManagerBase):
         """MOD: volume of the active video, i.e. the one the user last used.
 
         Falls back to the last block that was active, then to the last block.
+
+        An empty grid is the normal case here, not an edge case: the window
+        closes precisely because its last video closed, so there is nothing
+        left on screen by the time this runs. VideoBlocksManager keeps the
+        volume of the videos it closes for exactly that reason.
+
         Returns None when there is nothing to remember.
         """
         video_blocks = self._ctx.video_blocks
+
         if not video_blocks:
-            return None
+            return self._ctx.last_volume
 
         block = self._ctx.active_block or self._ctx.last_active_block
         if block is None:

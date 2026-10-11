@@ -30,6 +30,8 @@ from gridplayer.player.managers.window_state import WindowStateManager
 def block(block_id):
     b = type("StubBlock", (), {})()
     b.id = block_id
+    # every real VideoBlock declares this in __init__, cleared or not
+    b.video_params = None
     return b
 
 

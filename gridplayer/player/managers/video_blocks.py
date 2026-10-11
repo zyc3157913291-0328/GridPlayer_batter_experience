@@ -169,6 +169,10 @@ class VideoBlocksManager(ManagerBase):
 
         self._ctx.video_blocks = VideoBlocks()
 
+        # MOD: volume of the last video to leave the grid, kept because the
+        # grid is usually emptied *by* closing it (see _remember_volume).
+        self._ctx.last_volume = None
+
         self._live_video_blocks = 0
         self._videos_to_reload = []
 
@@ -354,6 +358,7 @@ class VideoBlocksManager(ManagerBase):
         previous_count = len(self._ctx.video_blocks)
 
         closing_block = self._ctx.video_blocks.by_id(_id)
+        self._remember_volume([closing_block])
         self._ctx.video_blocks.remove(closing_block)
 
         self._emit_video_count(previous_count)
@@ -361,6 +366,7 @@ class VideoBlocksManager(ManagerBase):
     def close_all(self):
         previous_count = len(self._ctx.video_blocks)
 
+        self._remember_volume(self._ctx.video_blocks)
         self.close_all_signal.emit()
 
         self._log.debug("Clearing video blocks array")
@@ -368,6 +374,50 @@ class VideoBlocksManager(ManagerBase):
         self._ctx.video_blocks.clear()
 
         self._emit_video_count(previous_count)
+
+    def _remember_volume(self, closing_blocks):
+        """MOD: keep the volume of videos that are on their way out.
+
+        Called while the blocks are still whole - close_single before its
+        remove(), close_all before its signal - because that is the last moment
+        video_params holds the volume the user set. WindowStateManager needs it
+        afterwards, when the grid has nothing left to read it from.
+
+        The focused video wins, so a grid-wide close remembers what the user
+        was actually listening to; otherwise the last one in the grid does.
+        """
+        candidates = [block for block in closing_blocks if block is not None]
+
+        if not candidates:
+            return
+
+        focused = self._focused_block()
+        block = next((b for b in candidates if b is focused), candidates[-1])
+
+        volume = getattr(block.video_params, "volume", None)
+
+        if volume is None:
+            return
+
+        self._ctx.last_volume = round(float(volume), 2)
+
+    def _focused_block(self):
+        """MOD: the video the user last used, or None if nothing says.
+
+        This runs while videos are being closed, which is earlier than the
+        focus bookkeeping is guaranteed to exist, and ctx raises KeyError -
+        not AttributeError - for an attribute that was never set.
+        """
+        for name in ("active_block", "last_active_block"):
+            try:
+                block = getattr(self._ctx, name)
+            except KeyError:
+                continue
+
+            if block is not None:
+                return block
+
+        return None
 
     def _emit_video_count(self, previous_count=0):
         """MOD: single place that announces the video count.
