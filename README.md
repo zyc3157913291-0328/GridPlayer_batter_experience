@@ -7,11 +7,11 @@
 >
 > This is a modified fork of GridPlayer 0.5.5, released under the GPL-3.0-or-later,
 > the same license as upstream. Modified from upstream 0.5.5 since **2026-10**;
-> all changes are marked in the source with `# MOD:`.
+> all changes are marked in the source with `MOD:`.
 
 在 VLC 之上同时播放多个视频的播放器 —— 上游已有的能力这里都有，下面只讲**这个版本多出来的东西**。
 
-改动一共 **29 个文件、约 +2800 行**（其中 10 个是新增文件），全部集中在 `gridplayer/` 里，改动处都有 `# MOD:` 注释。**没有修改任何上游的默认设置值**，只新增了配置键，所以不改 `settings.ini` 的话行为与上游一致。
+改动一共 **41 个文件**（21 个改动 + 20 个新增）、约 **+6450 行**；其中 2206 行是 vendored 的 `mpv_player/mpv.py`（逐字节未改，见下），本仓库自己写的约 **+4250 行**。改动全部集中在 `gridplayer/` 里，改过的地方都有 `MOD:` 标记 —— 单行的写成 `# MOD:`，成块新增的用 `# --- MOD: …` 横幅。**没有修改任何上游的默认设置值**，只新增了配置键，所以不改 `settings.ini` 的话行为与上游一致。
 
 ---
 
@@ -60,7 +60,7 @@
 | 功能 | 说明 | 主要文件 |
 |---|---|---|
 | **记住窗口状态** | 关闭时记住在哪块屏幕、什么位置、以及是全屏还是窗口化，下次启动原样恢复 | `player/managers/window_state.py`、`settings.py` |
-| **记住音量** | 关闭时记住当前活跃视频的音量，下次打开的视频用它播放。只在关闭时写、只在创建视频时读，所以同时开着的多个窗口不会互相覆盖 | `models/video.py`、`player/managers/active_block.py`、`window_state.py` |
+| **记住音量** | 关闭时记住当前活跃视频的音量，下次打开的视频用它播放。只在关闭时写、只在创建视频时读，所以同时开着的多个窗口不会互相覆盖。**网格先空掉再关窗也记得住**（见下） | `models/video.py`、`player/managers/active_block.py`、`player/managers/video_blocks.py`、`window_state.py` |
 | **没有视频就退出** | 关掉最后一个视频时直接关闭窗口，而不是留下一个写着"拖入文件播放"的空壳。**只在"从有到无"时触发** —— 不带参数启动仍然会停在窗口上（否则双击视频文件打开时会在加载前就把自己关掉） | `player/managers/video_blocks.py`、`window_state.py` |
 
 ### 与系统集成
@@ -79,6 +79,7 @@
 | **网格移入 QSplitter** | 上游的网格布局直接铺在窗口上（一个 QWidget 只能有一个布局），没法再加侧边面板。改为网格放进一个 host widget，host 与面板一起放进 `QSplitter` | `player/managers/grid.py` |
 | **窗口最小宽度跟着面板长** | 面板占的宽度会让视频区变窄，所以窗口最小宽度要把面板的 `minimumWidth()` 一起算进去 | `player/managers/grid.py` |
 | 关窗顺序修正 | 上游在 `closeEvent` 里先关播放列表再取音量，而关播放列表会清空视频块 —— 结果什么都没保存。改为先取值、再关列表、最后落盘 | `player/managers/window_state.py` |
+| 关掉最后一个视频后音量丢失 | 上游取音量要读挂在网格上的视频，而本分支的"没有视频就退出"（见上）让窗口是**因为网格空了才关**的 —— 等到那一刻视频块已销毁、`video_params` 已清空，于是读到"没东西可记"，写盘那步根本没发生（`settings.ini` 里的音量会一直停在旧值）。改为视频关闭的那一瞬间、`video_params` 还在时先取好，空网格时再用它回退。同时关掉多个则取最后有焦点的那个 | `player/managers/video_blocks.py`、`window_state.py` |
 | 单屏退出后网格错乱 | `video_count_changed` 先到网格、后到单屏管理器，于是网格是在"其余视频还被藏着"的状态下重建的，全部挤成一行。改为退出单屏后重建一次网格 | `player/managers/single_mode.py`、`player/managers/grid.py` |
 | 浮层遮罩坐标 | 硬件浮层的遮罩按子控件的父级相对坐标拼装，嵌套控件（标签栏里的标签）会画错位置 | `widgets/video_overlay.py` |
 
@@ -270,8 +271,8 @@ ffmpeg -i "<源文件>" -map 0:v:0 -map 0:a:0 `
 ## 仓库结构
 
 ```
-gridplayer/          上游 0.5.5 源码 + 本仓库的改动（`# MOD:` 注释标出）
-tests/               check_*.py —— 检查脚本，共 19 个、300+ 项检查
+gridplayer/          上游 0.5.5 源码 + 本仓库的改动（`MOD:` 标记标出）
+tests/               check_*.py —— 检查脚本，共 24 个、400+ 项检查
                      samples/ —— 自带的小样片（mp4/mov 各 ~10 KB），检查脚本依赖
                      render_*.py / probe_*.py —— 离屏渲染与端到端探针，不参与回归
 docs/                设计记录与发布准备文档
@@ -282,7 +283,7 @@ LICENSE              GPL-3.0 全文
 GridPlayer.ico       应用图标（5 个尺寸），由 _extract_icon.py 从官方 exe 提取
 _shell_menu.ps1      可选的资源管理器右键菜单（注册/撤销）
 _runtests.py         依次运行全部 check_*.py
-_selftest.py         音量记忆的专项检查
+_selftest.py         本分支自己的规矩自检（可移植 / 少依赖 / 模块化）
 _setup-env.ps1       建 venv + 装依赖
 _extract_icon.py     从 exe 提取多尺寸 .ico
 _make_launcher.py    生成带 GridPlayer 图标的启动器（见"让文件关联显示 GridPlayer 图标"）
@@ -299,7 +300,7 @@ _mkpatch.ps1         生成 PATCHES.diff（已被 git 取代，仅为兼容保�
 
 ```powershell
 pyenv\Scripts\python.exe _runtests.py     # 全部 check_*.py
-pyenv\Scripts\python.exe _selftest.py     # 音量记忆专项
+pyenv\Scripts\python.exe _selftest.py     # 本分支的规矩自检
 ```
 
 想只看某个方面就直接跑单个文件，例如 `pyenv\Scripts\python.exe tests\check_tab_bar.py`。
@@ -313,7 +314,7 @@ uvx --from "ruff>=0.14.10,<0.15.0" ruff check .
 uvx --from "ruff>=0.14.10,<0.15.0" ruff format --check .
 ```
 
-上游的政策是**测试文件不 lint、但要 format**（`[tool.ruff.lint] exclude = ["tests/*.py"]`），本仓库沿用。当前整个仓库 174 个文件 lint 与 format 均通过。
+上游的政策是**测试文件不 lint、但要 format**（`[tool.ruff.lint] exclude = ["tests/*.py"]`），本仓库沿用。当前整个仓库 188 个文件 lint 与 format 均通过。
 
 ---
 
