@@ -371,6 +371,33 @@ class OverlayBlock(QWidget):
 
         return False
 
+    # MOD
+    def is_in_dead_zone(self, global_pos) -> bool:
+        """Is this position inside the bottom control row?
+
+        The row and the margin under it read as part of the controls, yet a
+        click there used to reach the video underneath and pause it - or fill
+        the screen, on a double click. The row spans the video, and so does the
+        overlay, so the width needs no test: only the row's top edge has to be
+        found, and the layout knows it.
+
+        The overlay only answers the question. What a click there means is the
+        video block's call, because a translucent overlay window never sees a
+        click that lands on its transparent pixels - Windows hands it straight
+        to whatever is underneath.
+        """
+        if not self.isVisible():
+            return False
+
+        # a hidden overlay is parked outside the screen, so an unrelated
+        # position must not be measured against its geometry
+        if not self.rect().contains(self.mapFromGlobal(global_pos)):
+            return False
+
+        row_top = self.bottom_bar.geometry().top()
+
+        return global_pos.y() >= self.control_widget.mapToGlobal(QPoint(0, row_top)).y()
+
     @pyqtSlot()
     def playlist_toggle(self):
         self.playlist_clicked.emit()

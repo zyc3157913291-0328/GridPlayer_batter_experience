@@ -445,7 +445,23 @@ class VideoBlock(QWidget):
 
         event.ignore()
 
+    # MOD: the bottom control row belongs to the overlay. Between and around its
+    # buttons the overlay draws nothing of its own, so a click there used to
+    # reach the video and pause it - which reads as a bug when you were aiming
+    # at the controls. The overlay cannot swallow those clicks itself: it is a
+    # translucent window, and Windows hands a click on a fully transparent
+    # pixel straight to the window underneath, so the click never arrives. The
+    # video block is where every one of them ends up, so it asks the overlay
+    # where that row is and decides here. The wheel is deliberately not part of
+    # this: scrolling over the controls still seeks.
+    def _is_over_overlay_controls(self, global_pos) -> bool:
+        return self.overlay.is_in_dead_zone(global_pos)
+
     def mousePressEvent(self, event) -> None:
+        if self._is_over_overlay_controls(event.globalPos()):
+            event.accept()
+            return
+
         if Settings().get("internal/fake_overlay_invisibility"):
             self.window().raise_()
 
@@ -476,6 +492,12 @@ class VideoBlock(QWidget):
             event.ignore()
             return
 
+        # MOD: a release on the overlay's control row is not a release on the
+        # video, so it must not be read as a click either.
+        if self._is_over_overlay_controls(event.globalPos()):
+            event.accept()
+            return
+
         if self._ctx.is_disable_click_pause:
             event.ignore()
             return
@@ -484,6 +506,24 @@ class VideoBlock(QWidget):
             self.play_pause()
 
         event.ignore()
+
+    # MOD: filling the screen on a double click and opening the menu on a right
+    # click are not handled here at all - the block ignores the event and it
+    # travels up to the window, where the managers pick it up. Accepting it in
+    # the control row stops it before that happens.
+    def mouseDoubleClickEvent(self, event) -> None:
+        if self._is_over_overlay_controls(event.globalPos()):
+            event.accept()
+            return
+
+        super().mouseDoubleClickEvent(event)
+
+    def contextMenuEvent(self, event) -> None:
+        if self._is_over_overlay_controls(event.globalPos()):
+            event.accept()
+            return
+
+        super().contextMenuEvent(event)
 
     # MOD: show the controls while the pointer is over the video, instead of
     # only after a click. The overlay is an independent window sitting on top of
