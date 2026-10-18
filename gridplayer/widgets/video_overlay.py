@@ -65,6 +65,9 @@ PROPAGATED_EVENTS_FILTERED = (
 # button, so that it can be reached.
 VOLUME_HOVER_GRACE_MS = 150
 
+# MOD: the length of the horizontal volume bar in the control row.
+VOLUME_ROW_BAR_WIDTH = 100
+
 
 class OverlayBlock(QWidget):
     set_vid_pos = pyqtSignal(float)
@@ -138,6 +141,20 @@ class OverlayBlock(QWidget):
 
         self.volume_bar.hide()
 
+        # MOD: the other volume look - a mute button and a horizontal bar that
+        # stay in the control row, immediately left of the progress bar. Both
+        # looks are always built; apply_volume_style() decides which one shows.
+        self.volume_button_row = OverlayVolumeButton(parent=self)
+        self.volume_bar_row = OverlayProgressBar(parent=self)
+        self.volume_bar_row.setFixedWidth(VOLUME_ROW_BAR_WIDTH)
+
+        row_index = self.bottom_bar.indexOf(self.progress_bar)
+        self.bottom_bar.insertWidget(row_index, self.volume_button_row)
+        self.bottom_bar.insertWidget(row_index + 1, self.volume_bar_row)
+
+        self.is_volume_in_row = Settings().get("misc/volume_in_progress_row")
+        self.apply_volume_style()
+
     def ui_connect(self):
         qt_connect(
             (self.progress_bar.mouse_over, self.floating_progress.on_mouse_over),
@@ -157,6 +174,13 @@ class OverlayBlock(QWidget):
             (self.progress_bar.position_changed_global, self.emit_position_global),
             (self.volume_bar.position_changed_global, self.emit_volume_position_global),
             (self.volume_button.global_requested, self.mute_unmute_global),
+            (self.volume_button_row.clicked, self.mute_unmute),
+            (self.volume_button_row.global_requested, self.mute_unmute_global),
+            (self.volume_bar_row.position_changed, self.emit_volume_position),
+            (
+                self.volume_bar_row.position_changed_global,
+                self.emit_volume_position_global,
+            ),
             (
                 self.repeat_button.repeat_mode_changed_global,
                 self.repeat_mode_changed_global.emit,
@@ -338,6 +362,9 @@ class OverlayBlock(QWidget):
     @pyqtSlot(bool)
     def set_is_muted(self, is_muted):
         self.volume_button.is_off = is_muted
+        # MOD: the row look carries its own mute button, and only one of the
+        # two is on screen, so both are kept in step.
+        self.volume_button_row.is_off = is_muted
 
         # MOD: the bar is hover-driven now, so muting only takes the hovered
         # state into account instead of pinning it hidden or visible.
@@ -346,6 +373,7 @@ class OverlayBlock(QWidget):
     @pyqtSlot(float)
     def set_volume_position(self, position):
         self.volume_bar.position = position
+        self.volume_bar_row.position = position
 
     def eventFilter(self, obj, event):
         """MOD: the mute button and the volume bar behave as one hover target."""
@@ -359,16 +387,49 @@ class OverlayBlock(QWidget):
         return super().eventFilter(obj, event)
 
     def update_volume_bar_visibility(self):
-        """MOD: shows the volume bar while the pointer is on either control.
+        """MOD: shows the edge volume bar while the pointer is on either control.
 
         A muted video keeps it hidden, the same way it used to: the bar is the
-        level control, and there is no level to show while muted.
+        level control, and there is no level to show while muted. When the row
+        look is on, this bar is not used at all.
         """
+        if self.is_volume_in_row:
+            self.volume_bar.setVisible(False)
+            return
+
         is_hovered = self._is_within(
             self.volume_button, QCursor.pos()
         ) or self._is_within(self.volume_bar, QCursor.pos())
 
         self.volume_bar.setVisible(is_hovered and not self.volume_button.is_off)
+
+    def apply_volume_style(self):
+        """MOD: shows whichever of the two volume looks Settings asks for."""
+        self.volume_button_row.setVisible(self.is_volume_in_row)
+        self.volume_bar_row.setVisible(self.is_volume_in_row)
+
+        self.volume_button.setVisible(not self.is_volume_in_row)
+
+        self.update_volume_bar_visibility()
+
+    def sync_volume_style(self):
+        """MOD: picks up a change of the volume look without reopening the video.
+
+        The controls are shown on every mouse move over the video, so asking
+        again there is enough to make the switch take effect right away.
+        """
+        is_in_row = Settings().get("misc/volume_in_progress_row")
+
+        if is_in_row == self.is_volume_in_row:
+            return
+
+        self.is_volume_in_row = is_in_row
+        self.apply_volume_style()
+
+    def showEvent(self, event):
+        self.sync_volume_style()
+
+        super().showEvent(event)
 
     @pyqtSlot()
     def exit(self):
@@ -408,7 +469,10 @@ class OverlayBlock(QWidget):
 
     @pyqtSlot(bool)
     def set_volume_button_visible(self, is_visible):
-        self.volume_button.setVisible(is_visible)
+        # MOD: either the row look's mute button or the original one is the
+        # one on screen, so each follows its own style as well.
+        self.volume_button.setVisible(is_visible and not self.is_volume_in_row)
+        self.volume_button_row.setVisible(is_visible and self.is_volume_in_row)
 
     # MOD
     @pyqtSlot(object)

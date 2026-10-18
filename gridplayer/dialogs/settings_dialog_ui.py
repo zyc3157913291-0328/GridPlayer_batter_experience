@@ -104,6 +104,10 @@ class Ui_SettingsDialog:
             0, QtWidgets.QFormLayout.FieldRole, self.horizontalLayout_6
         )
         self.lay_section_player.addLayout(self.formLayout_10)
+        # MOD: which of the two volume looks the control row uses.
+        self.miscVolumeInProgressRow = QtWidgets.QCheckBox(self.page_general_player)
+        self.miscVolumeInProgressRow.setObjectName("miscVolumeInProgressRow")
+        self.lay_section_player.addWidget(self.miscVolumeInProgressRow)
         self.section_timeouts = QtWidgets.QLabel(self.page_general_player)
         font = QtGui.QFont()
         font.setBold(True)
@@ -635,6 +639,12 @@ class Ui_SettingsDialog:
         self.section_timeouts.setText(_translate("SettingsDialog", "Timeouts"))
         self.timeoutOverlayFlag.setText(
             _translate("SettingsDialog", "Hide overlay after timeout")
+        )
+        self.miscVolumeInProgressRow.setText(
+            _translate(
+                "SettingsDialog",
+                "Volume controls in the progress row, always visible",
+            )
         )
         self.label_3.setText(_translate("SettingsDialog", "(sec)"))
         self.timeoutMouseHideFlag.setText(

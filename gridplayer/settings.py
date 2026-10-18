@@ -76,6 +76,12 @@ _default_settings = {
     "video_defaults/auto_reload_timer": 0,
     "misc/overlay_hide": True,
     "misc/overlay_timeout": 3,
+    # MOD: where the volume controls live. False is the original look - a
+    # vertical bar against the right edge, up only while the pointer is on the
+    # mute button at the end of the control row. True swaps in a horizontal
+    # bar with its own mute button, sitting in that row just left of the
+    # progress bar, where the level is always in sight.
+    "misc/volume_in_progress_row": False,
     "misc/mouse_hide": True,
     "misc/mouse_hide_timeout": 5,
     "misc/vlc_options": "",

@@ -101,6 +101,7 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
             "video_defaults/auto_reload_timer": self.streamAutoReloadTimer,
             "misc/overlay_hide": self.timeoutOverlayFlag,
             "misc/overlay_timeout": self.timeoutOverlay,
+            "misc/volume_in_progress_row": self.miscVolumeInProgressRow,
             "misc/mouse_hide": self.timeoutMouseHideFlag,
             "misc/mouse_hide_timeout": self.timeoutMouseHide,
             "misc/vlc_options": self.miscVLCOptions,
