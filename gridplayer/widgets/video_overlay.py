@@ -61,6 +61,10 @@ PROPAGATED_EVENTS_FILTERED = (
     QEvent.Drop,
 )
 
+# MOD: how long the volume bar stays up after the pointer has left the mute
+# button, so that it can be reached.
+VOLUME_HOVER_GRACE_MS = 150
+
 
 class OverlayBlock(QWidget):
     set_vid_pos = pyqtSignal(float)
@@ -119,6 +123,20 @@ class OverlayBlock(QWidget):
         self.label_progress.hide()
         self.progress_bar.hide()
         self.progress_bar_placeholder.show()
+
+        # MOD: the volume bar shows while the pointer is on the mute button or
+        # on the bar itself. Leaving one starts a short grace period rather than
+        # hiding straight away, so crossing the small gap between the two - or
+        # stepping over the bar's edge - does not blink it out.
+        self.volume_bar_hover_timer = QTimer(self)
+        self.volume_bar_hover_timer.setSingleShot(True)
+        self.volume_bar_hover_timer.setInterval(VOLUME_HOVER_GRACE_MS)
+        self.volume_bar_hover_timer.timeout.connect(self.update_volume_bar_visibility)
+
+        self.volume_button.installEventFilter(self)
+        self.volume_bar.installEventFilter(self)
+
+        self.volume_bar.hide()
 
     def ui_connect(self):
         qt_connect(
@@ -321,11 +339,36 @@ class OverlayBlock(QWidget):
     def set_is_muted(self, is_muted):
         self.volume_button.is_off = is_muted
 
-        self.volume_bar.setHidden(self.volume_button.is_off)
+        # MOD: the bar is hover-driven now, so muting only takes the hovered
+        # state into account instead of pinning it hidden or visible.
+        self.update_volume_bar_visibility()
 
     @pyqtSlot(float)
     def set_volume_position(self, position):
         self.volume_bar.position = position
+
+    def eventFilter(self, obj, event):
+        """MOD: the mute button and the volume bar behave as one hover target."""
+        if obj is self.volume_button or obj is self.volume_bar:
+            if event.type() == QEvent.Enter:
+                self.volume_bar_hover_timer.stop()
+                self.update_volume_bar_visibility()
+            elif event.type() == QEvent.Leave:
+                self.volume_bar_hover_timer.start()
+
+        return super().eventFilter(obj, event)
+
+    def update_volume_bar_visibility(self):
+        """MOD: shows the volume bar while the pointer is on either control.
+
+        A muted video keeps it hidden, the same way it used to: the bar is the
+        level control, and there is no level to show while muted.
+        """
+        is_hovered = self._is_within(
+            self.volume_button, QCursor.pos()
+        ) or self._is_within(self.volume_bar, QCursor.pos())
+
+        self.volume_bar.setVisible(is_hovered and not self.volume_button.is_off)
 
     @pyqtSlot()
     def exit(self):
