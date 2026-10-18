@@ -25,6 +25,7 @@ from gridplayer.params.static import (
     OVERLAY_ACTIVITY_EVENT,
     PLAYER_ID_LENGTH,
     VIDEO_END_LOOP_MARGIN_MS,
+    SeekSyncMode,
     VideoAspect,
     VideoCrop,
     VideoRepeat,
@@ -301,6 +302,22 @@ class VideoBlock(QWidget):
             (overlay.mute_unmute_clicked, self.mute_unmute),
             (overlay.repeat_mode_changed, self.set_repeat_mode),  # MOD
             (overlay.speed_selected, self.set_rate),  # MOD
+            # MOD: the same five controls, forced onto every video. Control held
+            # or the right button - the control that was used decides.
+            (
+                overlay.set_vid_pos_global,
+                partial(self.manual_seek, "seek_percent", is_global=True),
+            ),
+            (overlay.set_volume_global, partial(self.set_volume, is_global=True)),
+            (
+                overlay.mute_unmute_clicked_global,
+                partial(self.mute_unmute, is_global=True),
+            ),
+            (
+                overlay.repeat_mode_changed_global,
+                partial(self.set_repeat_mode, is_global=True),
+            ),
+            (overlay.speed_selected_global, partial(self.set_rate, is_global=True)),
             (overlay.playlist_clicked, self.playlist_panel_toggle.emit),  # MOD
             (overlay.tab_activated, self.tab_activated.emit),  # MOD
             (overlay.tab_closed, self.tab_closed.emit),  # MOD
@@ -693,11 +710,24 @@ class VideoBlock(QWidget):
 
     @only_initialized
     @only_seekable
-    def manual_seek(self, command, *args):
+    def manual_seek(self, command, *args, is_global=False):
         getattr(self, command)(*args)
 
         if command in {"next_frame", "previous_frame"} and self.video_tracks:
             self.sync_paused.emit(True)
+
+        # MOD: Ctrl (or the right button) on the progress bar means every video.
+        # Forced through the manager's "single" signals, which skip the sync
+        # mode check - but in that mode's own flavour, so a forced seek and an
+        # ordinary one land on the same frames. Percent is the fallback when
+        # the playlist does not sync seeks at all.
+        if is_global:
+            if self._ctx.seek_sync_mode == SeekSyncMode.TIMECODE:
+                self.sync_others_time()
+            else:
+                self.sync_others_percent()
+
+            return
 
         self.sync_percent.emit(self.position)
         self.sync_time.emit(int(self.video_driver.length * self.position))
@@ -1140,7 +1170,15 @@ class VideoBlock(QWidget):
         self.overlay.set_tabs(tabs, current_id)
 
     @only_seekable
-    def set_repeat_mode(self, repeat_mode: VideoRepeat):
+    def set_repeat_mode(self, repeat_mode: VideoRepeat, is_global=False):
+        # MOD: Ctrl / right button covers every video. An absolute mode, not a
+        # step: this button cycles, and cycling each video separately leaves the
+        # grid in as many modes as it has cells.
+        if is_global:
+            self._ctx.commands.all("set_repeat_mode", repeat_mode)
+
+            return
+
         self.video_params.repeat_mode = repeat_mode
 
         # MOD: keep the overlay's repeat button in sync. This also covers
@@ -1319,7 +1357,15 @@ class VideoBlock(QWidget):
 
     @only_initialized
     @only_seekable
-    def set_rate(self, rate, is_silent=False):
+    def set_rate(self, rate, is_silent=False, is_global=False):
+        # MOD: Ctrl / right button on the speed control covers every video. The
+        # manager fans it out to the blocks, this one included, so nothing is
+        # applied twice.
+        if is_global:
+            self._ctx.commands.all("set_rate", rate)
+
+            return
+
         self.video_params.rate = rate
 
         self.video_driver.set_playback_rate(rate)
@@ -1340,11 +1386,19 @@ class VideoBlock(QWidget):
 
         self.video_driver.set_pause(paused)
 
-    def mute_unmute(self):
-        self.set_muted(not self.video_params.is_muted)
+    def mute_unmute(self, is_global=False):
+        # MOD: Ctrl / right button on the volume button mutes the whole grid.
+        # The value comes from this block's own state, so it is an override
+        # rather than a flip of every video's state at once.
+        self.set_muted(not self.video_params.is_muted, is_global=is_global)
 
     @only_initialized
-    def set_muted(self, muted):
+    def set_muted(self, muted, is_global=False):
+        if is_global:
+            self._ctx.commands.all("set_muted", muted)
+
+            return
+
         self.video_params.is_muted = muted
 
         self.video_driver.audio_set_mute(self.video_params.is_muted)
@@ -1352,7 +1406,13 @@ class VideoBlock(QWidget):
         self.is_muted_change.emit(self.video_params.is_muted)
 
     @only_initialized
-    def set_volume(self, percent):
+    def set_volume(self, percent, is_global=False):
+        # MOD: Ctrl / right button on the volume bar covers every video.
+        if is_global:
+            self._ctx.commands.all("set_volume", round(percent, 2))
+
+            return
+
         self.video_params.volume = round(percent, 2)
 
         self.video_driver.audio_set_volume(self.video_params.volume)

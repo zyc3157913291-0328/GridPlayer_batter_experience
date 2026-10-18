@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import QWidget
 from gridplayer.params.static import OVERLAY_ACTIVITY_EVENT
 from gridplayer.utils.speed_gears import GEARS, format_rate, index_for_rate
 from gridplayer.widgets.video_overlay_buttons import OverlayButton
-from gridplayer.widgets.video_overlay_elements import OverlayWidget
+from gridplayer.widgets.video_overlay_elements import OverlayWidget, is_global_gesture
 
 # MOD: how often an open gear list checks that the pointer is still on it, or on
 # the button that opened it. Polled rather than driven by enter and leave
@@ -41,6 +41,8 @@ class OverlaySpeedPopup(OverlayWidget):
     """
 
     rate_selected = pyqtSignal(float)
+    # MOD: the same pick, meant for every video
+    rate_selected_global = pyqtSignal(float)
 
     ROW_HEIGHT = 26
     OPACITY = 0.5  # what OverlayBlock puts on itself
@@ -128,8 +130,13 @@ class OverlaySpeedPopup(OverlayWidget):
     def mouseReleaseEvent(self, event):
         row = self._row_at(event.pos())
 
-        if event.button() == Qt.LeftButton and row is not None:
-            self.rate_selected.emit(self.rates_top_down[row])
+        # MOD: the click that picks the gear carries the scope - Control held
+        # or the right button means every video.
+        if event.button() in {Qt.LeftButton, Qt.RightButton} and row is not None:
+            if is_global_gesture(event):
+                self.rate_selected_global.emit(self.rates_top_down[row])
+            else:
+                self.rate_selected.emit(self.rates_top_down[row])
 
         self.hide()
 
@@ -155,6 +162,8 @@ class OverlaySpeedButton(OverlayButton):
 
     rate_selected = pyqtSignal(float)
     list_requested = pyqtSignal()
+    # MOD: right click puts every video on the speed this one already has
+    rate_selected_global = pyqtSignal(float)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -193,6 +202,11 @@ class OverlaySpeedButton(OverlayButton):
         """
         if event.button() == Qt.LeftButton:
             self.list_requested.emit()
+            event.accept()
+            return
+
+        if event.button() == Qt.RightButton:  # MOD
+            self.rate_selected_global.emit(self._rate)
             event.accept()
             return
 

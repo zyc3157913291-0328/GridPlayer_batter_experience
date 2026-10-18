@@ -141,6 +141,12 @@ class VideoBlocksManager(ManagerBase):
     all_volume_decrease = pyqtSignal()
     all_set_muted = pyqtSignal(bool)
 
+    # MOD: absolute setters. The [ALL] actions above only ever nudged volume
+    # and rate up or down, which cannot say "every video at 40%". With these,
+    # ("all", "set_volume", value) reaches every block through cmd_all.
+    all_set_volume = pyqtSignal(float)
+    all_set_rate = pyqtSignal(float)
+
     # MOD: forwarded from each block's overlay hamburger button.
     #
     # Direction matters here. The qt_connect() list below is written as
@@ -489,6 +495,8 @@ class VideoBlocksManager(ManagerBase):
             (self.all_volume_increase, vb.volume_increase),
             (self.all_volume_decrease, vb.volume_decrease),
             (self.all_set_muted, vb.set_muted),
+            (self.all_set_volume, vb.set_volume),  # MOD
+            (self.all_set_rate, vb.set_rate),  # MOD
             (self.all_previous_video, vb.previous_video),
             (self.all_next_video, vb.next_video),
             (self.hide_overlay, vb.hide_overlay),

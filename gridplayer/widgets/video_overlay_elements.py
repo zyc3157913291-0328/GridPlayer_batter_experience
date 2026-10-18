@@ -16,6 +16,19 @@ from gridplayer.params.static import OVERLAY_ACTIVITY_EVENT
 from gridplayer.utils.time_txt import get_time_txt
 
 
+def is_global_gesture(event) -> bool:
+    """True when a control should act on every video, not just its own.
+
+    MOD: Control held down, or the right button. The modifiers are read from
+    the event that ends the interaction - a drag begun one way and finished
+    the other follows its last step.
+    """
+    if event.button() == Qt.RightButton:
+        return True
+
+    return bool(event.modifiers() & Qt.ControlModifier)
+
+
 class OverlayWidget(QWidget):
     padding = 10
 
@@ -234,6 +247,8 @@ class OverlayBar(OverlayWidget):
 
 class OverlayProgressBar(OverlayBar):
     position_changed = pyqtSignal(float)
+    # MOD: the same position, asked for on every video
+    position_changed_global = pyqtSignal(float)
 
     mouse_over = pyqtSignal(QPoint, float)
     mouse_left = pyqtSignal()
@@ -266,8 +281,8 @@ class OverlayProgressBar(OverlayBar):
 
         self.mouse_over.emit(top_edge, mouse_position)
 
-        if QGuiApplication.mouseButtons() == Qt.LeftButton:
-            self._update_position(self.progress_select_x)
+        if QGuiApplication.mouseButtons() in {Qt.LeftButton, Qt.RightButton}:  # MOD
+            self._update_position(self.progress_select_x, is_global_gesture(event))
             event.accept()
 
             # Send activity event to keep overlay visible
@@ -278,14 +293,14 @@ class OverlayProgressBar(OverlayBar):
     def mouseReleaseEvent(self, event):
         """Consume mouse release to avoid pausing from parent event"""
 
-        if event.button() == Qt.LeftButton:
+        if event.button() in {Qt.LeftButton, Qt.RightButton}:
             event.accept()
         else:
             event.ignore()
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self._update_position(event.pos().x())
+        if event.button() in {Qt.LeftButton, Qt.RightButton}:
+            self._update_position(event.pos().x(), is_global_gesture(event))
 
         event.ignore()
 
@@ -363,10 +378,14 @@ class OverlayProgressBar(OverlayBar):
         self._loop_end = loop_end
         self.update()
 
-    def _update_position(self, x):
+    def _update_position(self, x, is_global=False):
         self.progress_select_x = x
         new_position = self.progress_select_x / self.width()
-        self.position_changed.emit(new_position)
+
+        if is_global:  # MOD
+            self.position_changed_global.emit(new_position)
+        else:
+            self.position_changed.emit(new_position)
 
     def _get_x_within_bounds(self, x):
         if x < 0:
@@ -378,6 +397,8 @@ class OverlayProgressBar(OverlayBar):
 
 class OverlayVolumeBar(OverlayBar):
     position_changed = pyqtSignal(float)
+    # MOD: the same level, asked for on every video
+    position_changed_global = pyqtSignal(float)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -402,8 +423,8 @@ class OverlayVolumeBar(OverlayBar):
 
         self.update()
 
-        if QGuiApplication.mouseButtons() == Qt.LeftButton:
-            self._update_position(self.progress_select_y)
+        if QGuiApplication.mouseButtons() in {Qt.LeftButton, Qt.RightButton}:  # MOD
+            self._update_position(self.progress_select_y, is_global_gesture(event))
             event.accept()
 
             # Send activity event to keep overlay visible
@@ -415,8 +436,8 @@ class OverlayVolumeBar(OverlayBar):
         event.accept()
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self._update_position(event.pos().y())
+        if event.button() in {Qt.LeftButton, Qt.RightButton}:  # MOD
+            self._update_position(event.pos().y(), is_global_gesture(event))
             event.accept()
         else:
             event.ignore()
@@ -463,10 +484,14 @@ class OverlayVolumeBar(OverlayBar):
         self._position = position
         self.update()
 
-    def _update_position(self, y):
+    def _update_position(self, y, is_global=False):
         self.progress_select_y = y
         new_position = 1.0 - (self.progress_select_y / self.height())
-        self.position_changed.emit(new_position)
+
+        if is_global:  # MOD
+            self.position_changed_global.emit(new_position)
+        else:
+            self.position_changed.emit(new_position)
 
     def _get_y_within_bounds(self, y):
         if y < 0:

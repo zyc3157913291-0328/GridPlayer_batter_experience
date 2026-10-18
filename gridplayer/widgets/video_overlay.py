@@ -77,6 +77,14 @@ class OverlayBlock(QWidget):
     tab_closed = pyqtSignal(str)
     tab_style_changed = pyqtSignal(str)
 
+    # MOD: the same five controls again, meant for every video. Emitted when
+    # the control was used with Control held or with the right button.
+    set_vid_pos_global = pyqtSignal(float)
+    set_volume_global = pyqtSignal(float)
+    mute_unmute_clicked_global = pyqtSignal()
+    repeat_mode_changed_global = pyqtSignal(object)
+    speed_selected_global = pyqtSignal(float)
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -127,6 +135,16 @@ class OverlayBlock(QWidget):
             # back out as the same "a rate was picked" signal
             (self.speed_button.list_requested, self.show_speed_list),
             (self.speed_popup.rate_selected, self.speed_selected.emit),
+            # MOD: the same controls, when the gesture asked for every video
+            (self.progress_bar.position_changed_global, self.emit_position_global),
+            (self.volume_bar.position_changed_global, self.emit_volume_position_global),
+            (self.volume_button.global_requested, self.mute_unmute_global),
+            (
+                self.repeat_button.repeat_mode_changed_global,
+                self.repeat_mode_changed_global.emit,
+            ),
+            (self.speed_popup.rate_selected_global, self.speed_selected_global.emit),
+            (self.speed_button.rate_selected_global, self.speed_selected_global.emit),
             (self.playlist_button.clicked, self.playlist_toggle),
         )
 
@@ -328,6 +346,18 @@ class OverlayBlock(QWidget):
     @pyqtSlot(float)
     def emit_volume_position(self, position):
         self.set_volume.emit(position)
+
+    @pyqtSlot(float)
+    def emit_position_global(self, position):
+        self.set_vid_pos_global.emit(position)
+
+    @pyqtSlot(float)
+    def emit_volume_position_global(self, position):
+        self.set_volume_global.emit(position)
+
+    @pyqtSlot()
+    def mute_unmute_global(self):
+        self.mute_unmute_clicked_global.emit()
 
     @pyqtSlot(bool)
     def set_is_active(self, is_active):

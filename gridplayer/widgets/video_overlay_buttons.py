@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import qApp
 
 from gridplayer.params.static import VideoRepeat, next_video_repeat
 from gridplayer.utils.qt import QABC
-from gridplayer.widgets.video_overlay_elements import OverlayWidget
+from gridplayer.widgets.video_overlay_elements import OverlayWidget, is_global_gesture
 from gridplayer.widgets.video_overlay_icons import (
     draw_cross,
     draw_menu,
@@ -24,6 +24,12 @@ from gridplayer.widgets.video_overlay_icons import (
 
 class OverlayButton(OverlayWidget, metaclass=QABC):
     clicked = pyqtSignal()
+
+    # MOD: buttons whose action can cover the whole grid set this, and connect
+    # to global_requested. Every other button keeps its plain left click, so a
+    # right click on it still reaches the window and opens the menu.
+    wants_global_gesture = False
+    global_requested = pyqtSignal()
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -77,13 +83,19 @@ class OverlayButton(OverlayWidget, metaclass=QABC):
     def mouseReleaseEvent(self, event):
         """Consume to avoid parent event"""
 
-        if event.button() == Qt.LeftButton:
+        if event.button() in {Qt.LeftButton, Qt.RightButton}:  # MOD
             event.accept()
         else:
             event.ignore()
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
+        if event.button() not in {Qt.LeftButton, Qt.RightButton}:  # MOD
+            event.ignore()
+            return
+
+        if self.wants_global_gesture and is_global_gesture(event):  # MOD
+            self.global_requested.emit()
+        elif event.button() == Qt.LeftButton:
             self.clicked.emit()
 
         event.ignore()
@@ -170,6 +182,9 @@ class OverlayPlayPauseButton(OverlayButtonDynamic):
 
 
 class OverlayVolumeButton(OverlayButton):
+    # MOD: Ctrl / right button mutes every video, to this one's own state
+    wants_global_gesture = True
+
     def icon(self, rect, painter, color_fg, color_bg):
         return draw_volume_on(rect, painter, color_fg, color_bg)
 
@@ -195,6 +210,11 @@ class OverlayRepeatButton(OverlayButton):
     """
 
     repeat_mode_changed = pyqtSignal(object)
+    # MOD: the global variant. Ctrl / the right button asks for an absolute
+    # mode rather than the next one, so the grid cannot end up split across
+    # several modes - and the icon follows the mode the blocks report back.
+    repeat_mode_changed_global = pyqtSignal(object)
+    wants_global_gesture = True
 
     _ICONS = {
         VideoRepeat.SINGLE_FILE: draw_repeat_single,
@@ -210,11 +230,17 @@ class OverlayRepeatButton(OverlayButton):
         self.setToolTip(REPEAT_MODE_TITLES[self._repeat_mode])
 
         self.clicked.connect(self._advance)
+        self.global_requested.connect(self._advance_global)
 
     def _advance(self):
         self.repeat_mode = next_video_repeat(self._repeat_mode)
 
         self.repeat_mode_changed.emit(self._repeat_mode)
+
+    def _advance_global(self):
+        # Announced, not stored: the block hands the mode to every video and
+        # each one writes it back through its own setter, this block included.
+        self.repeat_mode_changed_global.emit(next_video_repeat(self._repeat_mode))
 
     @property
     def repeat_mode(self):
