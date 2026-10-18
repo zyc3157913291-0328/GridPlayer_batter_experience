@@ -5,11 +5,12 @@ import sys
 from pathlib import Path
 
 from PyQt5.QtCore import QProcess, pyqtSignal, pyqtSlot
+from PyQt5.QtWidgets import QFileDialog
 
 from gridplayer.player.managers.base import ManagerBase
 from gridplayer.settings import Settings
 from gridplayer.utils.duration_probe import DurationProber
-from gridplayer.utils.media_folder import scan_folder
+from gridplayer.utils.media_folder import scan_directory
 from gridplayer.utils.play_history import PlayHistory
 from gridplayer.utils.single_instance import NEW_WINDOW_FLAG
 from gridplayer.utils.thumbnail_probe import ThumbnailProvider
@@ -32,11 +33,14 @@ class PlaylistPanelManager(ManagerBase):
         self._panel.hide()
         self._last_width = 0
         self._last_remembered = None
+        self._browsed_folder: Path | None = None
+        self._pin_video: Path | None = None
         self._panel.entry_activated.connect(self._play_entry)
         self._panel.entry_play_next.connect(self._play_next)
         self._panel.entry_new_window.connect(self._open_new_window)
         self._panel.entry_add_to_grid.connect(self._add_to_grid)
         self._panel.sort_changed.connect(self._on_sort_changed)
+        self._panel.folder_browse_requested.connect(self._browse_folder)
         self._panel.set_history(self._history.as_mapping())
         self._panel.set_sort(
             Settings().get("player/playlist_sort_key"),
@@ -123,10 +127,13 @@ class PlaylistPanelManager(ManagerBase):
             return
 
         block = self._target_block()
+
         if block is None:
+            if self._browsed_folder is not None:
+                self._show_folder(self._browsed_folder, None)
             # Nothing to show. Only clear when there really is nothing at all;
             # otherwise leave the current listing alone rather than wiping it.
-            if not self._ctx.video_blocks:
+            elif not self._ctx.video_blocks:
                 self._panel.set_entries([], None)
             return
 
@@ -141,7 +148,17 @@ class PlaylistPanelManager(ManagerBase):
             self._last_remembered = uri
             self._remember(uri)
 
-        entries = scan_folder(uri)
+        # A folder picked by hand stays on screen until a different video starts
+        # playing; then the panel goes back to following playback.
+        if self._browsed_folder is not None and uri != self._pin_video:
+            self._browsed_folder = None
+            self._pin_video = None
+
+        folder = self._browsed_folder or uri.parent
+        self._show_folder(folder, uri if folder == uri.parent else None)
+
+    def _show_folder(self, folder: Path, current: Path | None):
+        entries = scan_directory(folder)
 
         for i, entry in enumerate(entries):
             cached = self._prober.cached(entry)
@@ -149,9 +166,38 @@ class PlaylistPanelManager(ManagerBase):
                 entries[i] = entry.with_duration(cached)
 
         self._panel.set_history(self._history.as_mapping())
-        self._panel.set_entries(entries, uri)
+        self._panel.set_folder(self._browsed_folder)
+        self._panel.set_entries(entries, current)
         self._prober.request(entries)
         self._thumbs.request(entries)
+
+    def _browse_folder(self):
+        """Point the panel at another folder. Playback is deliberately untouched."""
+        block = self._target_block()
+
+        start = self._browsed_folder
+        if start is None and block is not None:
+            uri = block.video_params.uri
+            if isinstance(uri, Path):
+                start = uri.parent
+
+        chosen = QFileDialog.getExistingDirectory(
+            self.parent(),
+            self.tr("选择文件夹"),
+            "" if start is None else str(start),
+        )
+
+        if not chosen:
+            return
+
+        self._browsed_folder = Path(chosen)
+        self._pin_video = None
+        if block is not None:
+            uri = block.video_params.uri
+            if isinstance(uri, Path):
+                self._pin_video = uri
+
+        self.refresh()
 
     # --- reactions ---
 

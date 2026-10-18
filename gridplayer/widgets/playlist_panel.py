@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
 )
 
 from gridplayer.models.media_entry import MediaEntry
+from gridplayer.utils.file_manager import reveal_path
 from gridplayer.utils.media_folder import SORT_KEYS, sort_entries
 from gridplayer.utils.time_txt import get_time_txt
 
@@ -238,10 +239,23 @@ class PlaylistItemDelegate(QStyledItemDelegate):
         painter.restore()
 
 
+class ClickableLabel(QLabel):
+    """A label that behaves like a flat button."""
+
+    clicked = pyqtSignal()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self.rect().contains(event.pos()):
+            self.clicked.emit()
+        else:
+            super().mouseReleaseEvent(event)
+
+
 class PlaylistPanel(QWidget):
     """Lists the media files next to the current video, sortable like a file manager."""
 
     entry_activated = pyqtSignal(object)  # Path
+    folder_browse_requested = pyqtSignal()  # the path bar was clicked
     sort_changed = pyqtSignal(str, bool)  # key, desc - user-driven only
     entry_play_next = pyqtSignal(object)  # Path
     entry_new_window = pyqtSignal(object)  # Path
@@ -253,6 +267,7 @@ class PlaylistPanel(QWidget):
         self._entries: list[MediaEntry] = []
         self._history: dict = {}
         self._current: Path | None = None
+        self._folder: Path | None = None
         self._thumbnails: dict[str, object] = {}
 
         self._sort_key = "name"
@@ -304,9 +319,11 @@ class PlaylistPanel(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        self.folder_label = QLabel(self)
+        self.folder_label = ClickableLabel(self)
         self.folder_label.setContentsMargins(10, 8, 10, 4)
-        self.folder_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.folder_label.setCursor(Qt.PointingHandCursor)
+        self.folder_label.setToolTip(self.tr("点击选择文件夹"))
+        self.folder_label.clicked.connect(self.folder_browse_requested.emit)
         outer.addWidget(self.folder_label)
 
         header = QHBoxLayout()
@@ -356,6 +373,11 @@ class PlaylistPanel(QWidget):
     def set_entries(self, entries: Sequence[MediaEntry], current: Path | None):
         self._entries = list(entries)
         self._current = current
+        self._rebuild()
+
+    def set_folder(self, folder: Path | None):
+        """List an explicitly chosen folder instead of following playback."""
+        self._folder = Path(folder) if folder is not None else None
         self._rebuild()
 
     def set_current(self, current: Path | None):
@@ -470,10 +492,11 @@ class PlaylistPanel(QWidget):
             item.setSizeHint(QSize(0, ROW_HEIGHT))
             self._list.addItem(item)
 
-        if self._current is None:
-            self.folder_label.setText("")
-        else:
-            self.folder_label.setText(str(Path(self._current).parent))
+        folder = self._folder
+        if folder is None and self._current is not None:
+            folder = Path(self._current).parent
+
+        self.folder_label.setText("" if folder is None else str(folder))
 
     def _on_item_clicked(self, item: QListWidgetItem):
         self.entry_activated.emit(item.data(ROLE_PATH))
@@ -493,4 +516,5 @@ class PlaylistPanel(QWidget):
         menu.addAction(
             self.tr("在网格中添加播放"), lambda: self.entry_add_to_grid.emit(path)
         )
+        menu.addAction(self.tr("在文件管理器中打开"), lambda: reveal_path(Path(path)))
         menu.exec_(self._list.viewport().mapToGlobal(pos))

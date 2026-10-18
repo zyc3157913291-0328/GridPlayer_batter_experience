@@ -21,9 +21,9 @@ def natural_key(name: str):
     )
 
 
-def scan_folder(video_path: Path) -> list[MediaEntry]:
-    """Every supported media file next to `video_path`. Never raises."""
-    folder = Path(video_path).parent
+def scan_directory(folder: Path) -> list[MediaEntry]:
+    """Every supported media file directly inside `folder`. Never raises."""
+    folder = Path(folder)
 
     try:
         items = list(folder.iterdir())
@@ -44,6 +44,11 @@ def scan_folder(video_path: Path) -> list[MediaEntry]:
         entries.append(MediaEntry(item, item.name, stat.st_size, stat.st_mtime))
 
     return entries
+
+
+def scan_folder(video_path: Path) -> list[MediaEntry]:
+    """Every supported media file next to `video_path`. Never raises."""
+    return scan_directory(Path(video_path).parent)
 
 
 def _has_value(entry: MediaEntry, key: str, history: Mapping[str, int]) -> bool:
