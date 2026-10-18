@@ -1448,10 +1448,15 @@ class VideoBlock(QWidget):
 
     def play_pause(self, is_global=False):
         # MOD: a global gesture puts every video into this video's new state
-        # rather than toggling each one, which would leave a mixed grid.
+        # rather than toggling each one, which would leave a mixed grid. The
+        # manager's play/pause commands are absolute, so they are the ones to
+        # use - cmd_all() would want an all_play_pause() toggle instead.
         if is_global:
-            command = "pause" if not self.video_params.is_paused else "play"
-            self._ctx.commands.all(command)
+            if self.video_params.is_paused:
+                self._ctx.commands.all_play()
+            else:
+                self._ctx.commands.all_pause()
+
             return
 
         self.set_pause(not self.video_params.is_paused)

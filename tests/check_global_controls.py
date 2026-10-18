@@ -15,6 +15,7 @@ way and ends the other follows its last step.
 Run: pyenv\\Scripts\\python.exe tests\\check_global_controls.py
 """
 
+import re
 import sys
 from pathlib import Path
 from types import MethodType, SimpleNamespace
@@ -73,6 +74,12 @@ class CommandStub:
 
     def all(self, *args):
         self.calls.append(args)
+
+    def all_play(self):
+        self.calls.append(("all_play",))
+
+    def all_pause(self):
+        self.calls.append(("all_pause",))
 
 
 window = QWidget()
@@ -603,7 +610,7 @@ block.video_params.is_paused = False
 VideoBlock.play_pause(block, is_global=True)
 c.check(
     "a global play/pause pauses the grid when this video plays",
-    block.commands.calls == [("pause",)],
+    block.commands.calls == [("all_pause",)],
 )
 
 block = make_block()
@@ -612,7 +619,7 @@ block.set_pause = Recorder()
 VideoBlock.play_pause(block, is_global=True)
 c.check(
     "and plays the grid when this video is paused",
-    block.commands.calls == [("play",)],
+    block.commands.calls == [("all_play",)],
 )
 c.check(
     "without setting this video by hand",
@@ -779,6 +786,22 @@ c.check(
     "and the control row is covered by the same predicate",
     "self.overlay.is_over_control("
     in method_source(block_source, "_is_over_overlay_controls"),
+)
+
+sent = set(re.findall(r'commands\.all\("(\w+)"', block_source))
+c.check(
+    "every name the block sends through cmd_all has a signal to land on",
+    sent and all(hasattr(VideoBlocksManager, f"all_{name}") for name in sent),
+    f"names={sorted(sent)}",
+)
+c.check(
+    "and play/pause takes the manager's absolute commands instead",
+    "commands.all_play()" in block_source and "commands.all_pause()" in block_source,
+)
+c.check(
+    "which the manager really registers",
+    '"all_play": self.cmd_all_play' in source
+    and '"all_pause": self.cmd_all_pause' in source,
 )
 c.check(
     "the plain signals are all still there",
