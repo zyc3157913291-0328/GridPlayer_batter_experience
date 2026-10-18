@@ -29,6 +29,10 @@ POSITION_POLL_SEC = 0.25
 # how long to wait for mpv to parse a file before giving up on it
 LOAD_TIMEOUT_SEC = 30
 
+# how long a freshly loaded player gets to start moving on its own before it is
+# nudged with a seek (see PlayerProcessMPV._ensure_playing)
+STARTUP_STALL_SEC = 1.5
+
 
 class PlayerProcessMPV(CommandLoopThreaded):
     def __init__(self, player_id, release_callback, init_data, **kwargs):
@@ -106,9 +110,41 @@ class PlayerProcessMPV(CommandLoopThreaded):
             self._apply_initial_state(media_input)
 
             self.notify_load_video_done(self._media_from_player())
+
+            self._ensure_playing()
         except Exception as exc:
             self._log.error(f"mpv load failed: {exc}")
             self.notify_error(translate("Video Error", "Failed to load media"))
+
+    def _ensure_playing(self):
+        """Nudge a player whose start-up seek never completed.
+
+        Opening several videos at once occasionally leaves a libmpv core parked
+        at the start: the media is loaded and the player is not paused, but the
+        seek that begins playback never finishes, so the position stays at zero
+        for good. Asking it to play again does not help, only a fresh seek does
+        - which is what reloading the video by hand does.
+        """
+        try:
+            deadline = time.monotonic() + STARTUP_STALL_SEC
+
+            while time.monotonic() < deadline:
+                if self._poll_stop.is_set():
+                    return
+
+                if self._player.time_pos:
+                    return
+
+                time.sleep(0.05)
+
+            if self._player.is_paused:
+                return
+
+            self._log.debug("player parked at the start, seeking to unstick it")
+            self._player.set_time(0)
+        except Exception:
+            # a player that cannot be checked must not fail the load itself
+            self._log.debug("could not check whether the player had started")
 
     def _apply_initial_state(self, media_input):
         if media_input.initial_time:
