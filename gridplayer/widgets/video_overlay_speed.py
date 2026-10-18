@@ -22,6 +22,12 @@ from gridplayer.utils.speed_gears import GEARS, format_rate, index_for_rate
 from gridplayer.widgets.video_overlay_buttons import OverlayButton
 from gridplayer.widgets.video_overlay_elements import OverlayWidget
 
+# MOD: how often an open gear list checks that the pointer is still on it, or on
+# the button that opened it. Polled rather than driven by enter and leave
+# events: while the list is open it is a popup holding a mouse grab, so the
+# button would see no leave event even with the pointer sitting on the list.
+HOVER_CHECK_MS = 100
+
 
 class OverlaySpeedPopup(OverlayWidget):
     """The gear list, drawn rather than handed to QMenu.
@@ -29,7 +35,9 @@ class OverlaySpeedPopup(OverlayWidget):
     A menu would bring its own frame, its own palette and its own idea of a
     list; the request is for something that reads as part of the overlay - the
     same translucent grey, a single rectangle, and the rates in descending
-    order. Being a Qt.Popup still gets Qt's own click-away and Esc dismissal.
+    order. Being a Qt.Popup still gets Qt's own click-away and Esc dismissal,
+    and the overlay closes it once the pointer has left both it and the button
+    that opened it.
     """
 
     rate_selected = pyqtSignal(float)

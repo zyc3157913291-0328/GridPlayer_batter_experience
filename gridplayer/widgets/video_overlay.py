@@ -1,5 +1,5 @@
 from PyQt5.QtCore import QEvent, QPoint, QRect, Qt, QTimer, pyqtSignal, pyqtSlot
-from PyQt5.QtGui import QGuiApplication, QPalette, QRegion
+from PyQt5.QtGui import QCursor, QGuiApplication, QPalette, QRegion
 from PyQt5.QtWidgets import (
     QApplication,
     QGraphicsOpacityEffect,
@@ -32,6 +32,7 @@ from gridplayer.widgets.video_overlay_elements import (
     OverlayWidget,
 )
 from gridplayer.widgets.video_overlay_speed import (  # MOD
+    HOVER_CHECK_MS,
     OverlaySpeedButton,
     OverlaySpeedIndicator,
     OverlaySpeedPopup,
@@ -93,6 +94,16 @@ class OverlayBlock(QWidget):
         self.label_info_hide_timer = QTimer()
         self.label_info_hide_timer.setSingleShot(True)
         self.label_info_hide_timer.timeout.connect(self.label_info.hide)
+
+        # MOD: an open gear list closes itself once the pointer is no longer on
+        # the button or on the list. See close_speed_list_when_unhovered().
+        # Owned by the overlay: a closing video takes the overlay down with it,
+        # and a timer left running would then tick on a deleted widget.
+        self.speed_list_hover_timer = QTimer(self)
+        self.speed_list_hover_timer.setInterval(HOVER_CHECK_MS)
+        self.speed_list_hover_timer.timeout.connect(
+            self.close_speed_list_when_unhovered
+        )
 
         self.label_info.hide()
         self.floating_progress.hide()
@@ -349,6 +360,42 @@ class OverlayBlock(QWidget):
         )
 
         self.speed_popup.show_above(anchor)
+        self.speed_list_hover_timer.start()
+
+    # MOD
+    @staticmethod
+    def _is_within(widget, global_pos) -> bool:
+        return widget.rect().contains(widget.mapFromGlobal(global_pos))
+
+    # MOD
+    def is_over_speed_list(self, global_pos) -> bool:
+        """Is this position on the speed button, or on the gear list itself?
+
+        The two belong together: the list opens directly above the button and
+        is exactly as wide, so moving from one to the other never crosses a
+        gap that belongs to neither.
+        """
+        return self._is_within(self.speed_button, global_pos) or self._is_within(
+            self.speed_popup, global_pos
+        )
+
+    # MOD
+    def close_speed_list_when_unhovered(self):
+        """Close the gear list once the pointer is on neither of the two.
+
+        Picking a gear and clicking away both still close it; this only adds
+        the case the list used to leave open, where the pointer simply wanders
+        off and the list sits there until something else dismisses it.
+        """
+        if not self.speed_popup.isVisible():
+            self.speed_list_hover_timer.stop()
+            return
+
+        if self.is_over_speed_list(QCursor.pos()):
+            return
+
+        self.speed_popup.hide()
+        self.speed_list_hover_timer.stop()
 
     # MOD
     def is_over_control(self, global_pos) -> bool:

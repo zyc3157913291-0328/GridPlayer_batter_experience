@@ -23,7 +23,7 @@ c = Checker("speed control")
 
 from PyQt5.QtCore import QPoint, QRect, Qt
 from PyQt5.QtGui import QFontMetrics
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QApplication, QWidget
 
 from gridplayer.utils.speed_gears import (
     GEARS,
@@ -31,7 +31,9 @@ from gridplayer.utils.speed_gears import (
     format_rate,
     index_for_rate,
 )
+from gridplayer.widgets import video_overlay as overlay_module
 from gridplayer.widgets.video_overlay import OverlayBlock
+from gridplayer.widgets.video_overlay_speed import HOVER_CHECK_MS
 
 window = QWidget()
 overlay = OverlayBlock(window)
@@ -39,6 +41,9 @@ overlay = OverlayBlock(window)
 button = overlay.speed_button
 popup = overlay.speed_popup
 indicator = overlay.speed_indicator
+
+# the strip is only ever inspected as a widget here, never put on the screen
+popup.setAttribute(Qt.WA_DontShowOnScreen, True)
 
 # --- the control exists and is wired ---
 
@@ -280,6 +285,115 @@ c.check(
     and "return self._video_area_rect()" in block_src
     and "show_at(self._speed_indicator_rect())" in block_src,
     "one video -> over that video; Ctrl -> over the whole area",
+)
+
+# --- the list closes itself once the pointer is on neither of the two ---
+
+window.setAttribute(Qt.WA_DontShowOnScreen, True)
+window.resize(640, 400)
+window.show()
+overlay.setGeometry(0, 0, 640, 400)
+QApplication.processEvents()
+
+button_rect = QRect(button.mapToGlobal(QPoint(0, 0)), button.size())
+away = button_rect.center() + QPoint(400, 200)
+
+c.check(
+    "the pointer on the speed button counts as being on the list",
+    overlay.is_over_speed_list(button_rect.center()),
+    f"button at {button_rect}",
+)
+c.check(
+    "a point on neither the button nor the list does not",
+    not overlay.is_over_speed_list(away),
+    f"{away}",
+)
+
+popup.show_above(button_rect)
+c.check(
+    "the open list is a target of its own",
+    overlay.is_over_speed_list(popup.mapToGlobal(popup.rect().center())),
+    f"list at {popup.geometry()}",
+)
+c.check(
+    "the two touch, so moving between them crosses no dead ground",
+    popup.y() + popup.height() == button_rect.top(),
+    f"list bottom {popup.y() + popup.height()} vs button top {button_rect.top()}",
+)
+popup.hide()
+
+
+class CursorStub:
+    """Stands in for the cursor, so the poll can be driven from here."""
+
+    pos_value = QPoint(0, 0)
+
+    @staticmethod
+    def pos():
+        return CursorStub.pos_value
+
+
+real_cursor = overlay_module.QCursor
+overlay_module.QCursor = CursorStub
+
+overlay.set_rate(1.25)
+overlay.show_speed_list()
+c.check(
+    "opening the list starts the poll",
+    popup.isVisible() and overlay.speed_list_hover_timer.isActive(),
+)
+c.check(
+    "the list it opens touches the button it opened from",
+    popup.y() + popup.height() == button.mapToGlobal(QPoint(0, 0)).y(),
+    f"list bottom {popup.y() + popup.height()} "
+    f"vs button top {button.mapToGlobal(QPoint(0, 0)).y()}",
+)
+
+CursorStub.pos_value = button_rect.center()
+overlay.close_speed_list_when_unhovered()
+c.check(
+    "a pointer resting on the button keeps it open",
+    popup.isVisible(),
+    "the button is part of the target",
+)
+
+CursorStub.pos_value = popup.mapToGlobal(popup.rect().center())
+overlay.close_speed_list_when_unhovered()
+c.check("and so does one inside the list", popup.isVisible())
+
+CursorStub.pos_value = away
+overlay.close_speed_list_when_unhovered()
+c.check(
+    "it closes by itself once the pointer is on neither",
+    not popup.isVisible(),
+    "no gear picked and no click away - the pointer simply left",
+)
+c.check(
+    "and the polling stops with it",
+    not overlay.speed_list_hover_timer.isActive(),
+)
+
+overlay_module.QCursor = real_cursor
+popup.hide()
+
+overlay_src = (ROOT / "gridplayer" / "widgets" / "video_overlay.py").read_text(
+    encoding="utf-8"
+)
+
+c.check(
+    "it polls at a rate the eye reads as immediate",
+    overlay.speed_list_hover_timer.interval() == HOVER_CHECK_MS,
+    f"{overlay.speed_list_hover_timer.interval()} ms",
+)
+c.check(
+    "and the timer is owned by the overlay, so a closed video takes it down",
+    overlay.speed_list_hover_timer.parent() is overlay,
+    "a timer outliving its widget would tick on a deleted object",
+)
+c.check(
+    "a popup holding the mouse grab is why this polls, not a leave event",
+    "HOVER_CHECK_MS" in overlay_src and "timeout.connect" in overlay_src,
+    "the button sees no leave event while the list is open",
 )
 
 c.finish()
