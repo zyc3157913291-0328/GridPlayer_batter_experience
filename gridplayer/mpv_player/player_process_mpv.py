@@ -111,10 +111,19 @@ class PlayerProcessMPV(CommandLoopThreaded):
 
             self.notify_load_video_done(self._media_from_player())
 
+            self._report_playback_status()
+
             self._ensure_playing()
         except Exception as exc:
             self._log.error(f"mpv load failed: {exc}")
             self.notify_error(translate("Video Error", "Failed to load media"))
+
+    # MOD: the app's pause state is whatever the driver last reported, and mpv
+    # only reports the pause property when it changes. Its first report arrives
+    # long before the video is loaded, so a video that starts playing on its own
+    # would keep showing the play icon - report the settled state once here
+    def _report_playback_status(self):
+        self.notify_playback_status_changed(self._player.is_paused)
 
     def _ensure_playing(self):
         """Nudge a player whose start-up seek never completed.

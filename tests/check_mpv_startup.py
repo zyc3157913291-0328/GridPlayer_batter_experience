@@ -115,12 +115,45 @@ c.check(
     f"STARTUP_STALL_SEC={stall_sec}",
 )
 
-# and the watchdog is wired into the load path, after the media is reported
+# the load also reports the state mpv settled on, or a video that started
+# playing on its own keeps showing the play icon in the overlay
+sent = []
+
+player = PlayerStub(time_pos=0.0, is_paused=False)
+process = make_process(player)
+process.cmd_send = lambda *args: sent.append(args)
+process._report_playback_status()
+c.check(
+    "load reports a playing player",
+    sent == [("playback_status_changed_emit", False)],
+    f"sent={sent}",
+)
+
+sent.clear()
+
+player = PlayerStub(time_pos=0.0, is_paused=True)
+process = make_process(player)
+process.cmd_send = lambda *args: sent.append(args)
+process._report_playback_status()
+c.check(
+    "load reports a paused player",
+    sent == [("playback_status_changed_emit", True)],
+    f"sent={sent}",
+)
+
+# and both reports are wired into the load path, after the media is reported
 source = Path(mpv_process.__file__).read_text(encoding="utf-8")
 c.check(
     "load worker calls the watchdog",
     source.index("notify_load_video_done") < source.index("self._ensure_playing()"),
     "watchdog must run after the load is reported",
+)
+c.check(
+    "load worker reports the playback state",
+    source.index("notify_load_video_done")
+    < source.index("self._report_playback_status()")
+    < source.index("self._ensure_playing()"),
+    "the state mpv settled on must be reported once the media is loaded",
 )
 c.check(
     "watchdog seeks instead of replaying",
