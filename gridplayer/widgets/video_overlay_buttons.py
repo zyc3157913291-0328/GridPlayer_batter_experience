@@ -174,6 +174,9 @@ class OverlayExitButton(OverlayButton):
 
 
 class OverlayPlayPauseButton(OverlayButtonDynamic):
+    # MOD: Ctrl / right button plays or pauses every video, to this one's state
+    wants_global_gesture = True
+
     def icon(self, rect, painter, color_fg, color_bg):
         return draw_play(rect, painter, color_fg, color_bg)
 

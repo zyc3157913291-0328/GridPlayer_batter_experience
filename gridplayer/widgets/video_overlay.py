@@ -84,11 +84,12 @@ class OverlayBlock(QWidget):
     tab_closed = pyqtSignal(str)
     tab_style_changed = pyqtSignal(str)
 
-    # MOD: the same five controls again, meant for every video. Emitted when
-    # the control was used with Control held or with the right button.
+    # MOD: the same controls again, meant for every video. Emitted when the
+    # control was used with Control held or with the right button.
     set_vid_pos_global = pyqtSignal(float)
     set_volume_global = pyqtSignal(float)
     mute_unmute_clicked_global = pyqtSignal()
+    play_pause_clicked_global = pyqtSignal()
     repeat_mode_changed_global = pyqtSignal(object)
     speed_selected_global = pyqtSignal(float)
 
@@ -174,6 +175,7 @@ class OverlayBlock(QWidget):
             (self.progress_bar.position_changed_global, self.emit_position_global),
             (self.volume_bar.position_changed_global, self.emit_volume_position_global),
             (self.volume_button.global_requested, self.mute_unmute_global),
+            (self.play_pause_button.global_requested, self.play_pause_global),
             (self.volume_button_row.clicked, self.mute_unmute),
             (self.volume_button_row.global_requested, self.mute_unmute_global),
             (self.volume_bar_row.position_changed, self.emit_volume_position),
@@ -462,6 +464,10 @@ class OverlayBlock(QWidget):
     @pyqtSlot()
     def mute_unmute_global(self):
         self.mute_unmute_clicked_global.emit()
+
+    @pyqtSlot()
+    def play_pause_global(self):
+        self.play_pause_clicked_global.emit()
 
     @pyqtSlot(bool)
     def set_is_active(self, is_active):

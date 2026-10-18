@@ -4,8 +4,10 @@ The overlay's controls are drawn per video, but several of them stand for a
 setting the whole grid shares: volume, speed, play order, the progress bar. The
 request is that using one of them with Control held - or with the right button -
 applies it to every video, while a plain left click keeps working on its own
-video. The two buttons that cannot mean anything global (play/pause) stay out of
-it: on those, a right click still reaches the window and opens the menu.
+video. Only the close button is left out - it has nothing to mean for the
+others. Play/pause joins in, but it never toggles each video on its own: the
+video the click landed on decides the new state and every video is put into it,
+so a grid of mixed states cannot come out of one gesture.
 
 Only the step that finishes the interaction is asked, so a drag that starts one
 way and ends the other follows its last step.
@@ -231,11 +233,13 @@ c.check(
 
 # --- the buttons -------------------------------------------------------------
 
-# play/pause is deliberately not part of it
+# play/pause joins the global set through its own button
 play_clicks = []
+play_globals = []
 play_pause_button.clicked.connect(lambda: play_clicks.append(1))
+play_pause_button.global_requested.connect(lambda: play_globals.append(1))
 
-ev = send(
+send(
     play_pause_button,
     mouse(
         QEvent.MouseButtonPress,
@@ -245,14 +249,21 @@ ev = send(
         Qt.ControlModifier,
     ),
 )
-c.check("a Control click on play/pause still just plays", play_clicks == [1])
+c.check("a Control click on play/pause asks for every video", play_globals == [1])
+c.check("and does not play this one on its own", play_clicks == [])
 
-ev = send(
+send(
     play_pause_button,
     mouse(QEvent.MouseButtonPress, play_pause_button, QPoint(5, 5), Qt.RightButton),
 )
-c.check("and the right button on it is left for the window", play_clicks == [1])
-c.check("the right press is not swallowed", not ev.isAccepted())
+c.check("the right button on it asks for every video too", play_globals == [1, 1])
+c.check("still nothing plays on its own", play_clicks == [])
+
+send(
+    play_pause_button,
+    mouse(QEvent.MouseButtonPress, play_pause_button, QPoint(5, 5), Qt.LeftButton),
+)
+c.check("a plain left click still plays just this one", play_clicks == [1])
 
 volume_globals = []
 volume_clicks = []
@@ -588,6 +599,68 @@ c.check(
 )
 
 block = make_block()
+block.video_params.is_paused = False
+VideoBlock.play_pause(block, is_global=True)
+c.check(
+    "a global play/pause pauses the grid when this video plays",
+    block.commands.calls == [("pause",)],
+)
+
+block = make_block()
+block.video_params.is_paused = True
+block.set_pause = Recorder()
+VideoBlock.play_pause(block, is_global=True)
+c.check(
+    "and plays the grid when this video is paused",
+    block.commands.calls == [("play",)],
+)
+c.check(
+    "without setting this video by hand",
+    not block.set_pause.calls,
+)
+
+block = make_block()
+block.video_params.is_paused = True
+block.set_pause = Recorder()
+VideoBlock.play_pause(block)
+c.check(
+    "a plain play/pause still only touches this video",
+    block.set_pause.calls == [(False,)] and not block.commands.calls,
+)
+
+# a point on a control belongs to the overlay, not to the video behind it
+
+
+class OverlayStub:
+    def __init__(self, over_control, in_dead_zone):
+        self._over_control = over_control
+        self._in_dead_zone = in_dead_zone
+
+    def is_over_control(self, global_pos):
+        return self._over_control
+
+    def is_in_dead_zone(self, global_pos):
+        return self._in_dead_zone
+
+
+def over_stub(over_control, in_dead_zone):
+    return SimpleNamespace(overlay=OverlayStub(over_control, in_dead_zone))
+
+
+c.check(
+    "a point on a control counts as the overlay",
+    VideoBlock._is_over_overlay_controls(over_stub(True, False), QPoint(5, 5)),
+)
+c.check(
+    "a point in the row's gaps still counts as the overlay",
+    VideoBlock._is_over_overlay_controls(over_stub(False, True), QPoint(5, 5)),
+)
+c.check(
+    "and a point on the video itself does not",
+    not VideoBlock._is_over_overlay_controls(over_stub(False, False), QPoint(5, 5)),
+)
+
+block = make_block()
 VideoBlock.set_repeat_mode(block, VideoRepeat.SINGLE_FILE, is_global=True)
 c.check(
     "the play order is sent as an absolute mode",
@@ -682,8 +755,30 @@ overlay_source = (
     / "video_overlay.py"
 ).read_text(encoding="utf-8")
 c.check(
-    "play/pause is not part of the global set",
-    "play_pause_clicked_global" not in overlay_source,
+    "play/pause has a global twin as well",
+    "play_pause_clicked_global = pyqtSignal()" in overlay_source,
+)
+
+block_source = (
+    Path(__file__).resolve().parent.parent / "gridplayer" / "widgets" / "video_block.py"
+).read_text(encoding="utf-8")
+
+
+def method_source(text, name):
+    start = text.index(f"def {name}(")
+    end = text.find("\n    def ", start + 1)
+
+    return text[start : end if end != -1 else len(text)]
+
+
+c.check(
+    "the video's right click defers to a control under it",
+    "_is_over_overlay_controls(" in method_source(block_source, "contextMenuEvent"),
+)
+c.check(
+    "and the control row is covered by the same predicate",
+    "self.overlay.is_over_control("
+    in method_source(block_source, "_is_over_overlay_controls"),
 )
 c.check(
     "the plain signals are all still there",

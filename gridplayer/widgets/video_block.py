@@ -310,6 +310,10 @@ class VideoBlock(QWidget):
             ),
             (overlay.set_volume_global, partial(self.set_volume, is_global=True)),
             (
+                overlay.play_pause_clicked_global,
+                partial(self.play_pause, is_global=True),
+            ),
+            (
                 overlay.mute_unmute_clicked_global,
                 partial(self.mute_unmute, is_global=True),
             ),
@@ -472,7 +476,12 @@ class VideoBlock(QWidget):
     # where that row is and decides here. The wheel is deliberately not part of
     # this: scrolling over the controls still seeks.
     def _is_over_overlay_controls(self, global_pos) -> bool:
-        return self.overlay.is_in_dead_zone(global_pos)
+        # MOD: both the controls themselves and the gaps in the row they sit in
+        # count as the overlay - a click, a double click or a right click that
+        # lands on either belongs to the controls, not to the video behind them.
+        return self.overlay.is_over_control(global_pos) or self.overlay.is_in_dead_zone(
+            global_pos
+        )
 
     def mousePressEvent(self, event) -> None:
         if self._is_over_overlay_controls(event.globalPos()):
@@ -1437,7 +1446,14 @@ class VideoBlock(QWidget):
 
         self.set_volume(self.video_params.volume)
 
-    def play_pause(self):
+    def play_pause(self, is_global=False):
+        # MOD: a global gesture puts every video into this video's new state
+        # rather than toggling each one, which would leave a mixed grid.
+        if is_global:
+            command = "pause" if not self.video_params.is_paused else "play"
+            self._ctx.commands.all(command)
+            return
+
         self.set_pause(not self.video_params.is_paused)
 
     @only_initialized

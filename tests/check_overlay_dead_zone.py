@@ -435,4 +435,9 @@ c.check(
     "one helper, one delegate",
 )
 
+# tear the widgets down while the application is still alive: a top-level
+# widget that outlives it can take the interpreter down with it
+recorder.deleteLater()
+QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
 c.finish()
