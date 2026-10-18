@@ -19,11 +19,15 @@ from gridplayer.utils.time_txt import get_time_txt
 def is_global_gesture(event) -> bool:
     """True when a control should act on every video, not just its own.
 
-    MOD: Control held down, or the right button. The modifiers are read from
-    the event that ends the interaction - a drag begun one way and finished
-    the other follows its last step.
+    MOD: Control held down, or the right button. Every event of a drag is
+    asked, so a drag begun one way and finished the other follows its last
+    step. A move carries no button() at all - only the button still held in
+    buttons() - so both are read: without that, a right-button drag would
+    report the level it started at instead of the one it was released on.
     """
-    if event.button() == Qt.RightButton:
+    buttons = event.button() | event.buttons()
+
+    if buttons & Qt.RightButton:
         return True
 
     return bool(event.modifiers() & Qt.ControlModifier)

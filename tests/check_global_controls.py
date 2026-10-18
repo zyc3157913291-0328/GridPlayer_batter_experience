@@ -28,9 +28,10 @@ bootstrap()
 c = Checker("global controls")
 
 from PyQt5.QtCore import QEvent, QPoint, QPointF, Qt
-from PyQt5.QtGui import QMouseEvent
+from PyQt5.QtGui import QGuiApplication, QMouseEvent
 from PyQt5.QtWidgets import QApplication, QWidget
 
+import gridplayer.widgets.video_overlay_elements as overlay_elements
 from gridplayer.params.static import SeekSyncMode, VideoRepeat, next_video_repeat
 from gridplayer.player.managers.video_blocks import VideoBlocksManager
 from gridplayer.widgets.video_block import VideoBlock
@@ -38,13 +39,13 @@ from gridplayer.widgets.video_overlay import OverlayBlock
 from gridplayer.widgets.video_overlay_elements import is_global_gesture
 
 
-def mouse(kind, widget, pos, button, modifiers=Qt.NoModifier):
+def mouse(kind, widget, pos, button, modifiers=Qt.NoModifier, buttons=None):
     return QMouseEvent(
         kind,
         QPointF(pos),
         QPointF(widget.mapToGlobal(pos)),
         button,
-        button,
+        button if buttons is None else buttons,
         modifiers,
     )
 
@@ -314,6 +315,98 @@ send(
 c.check(
     "the right button on the volume button mutes every video",
     volume_globals == [1, 1] and volume_clicks == [1],
+)
+
+# a drag asks on every step, so the level it ends on is the level it was
+# released on - a move event carries no button(), only the one still held
+
+
+class MouseButtonsStub:
+    def __init__(self):
+        self.buttons = Qt.NoButton
+
+    def mouseButtons(self):
+        return self.buttons
+
+    def sendEvent(self, *args):
+        return QGuiApplication.sendEvent(*args)
+
+
+mouse_state = MouseButtonsStub()
+overlay_elements.QGuiApplication = mouse_state
+
+drag_locals = []
+drag_globals = []
+
+volume_bar.position_changed.connect(lambda value: drag_locals.append(value))
+volume_bar.position_changed_global.connect(lambda value: drag_globals.append(value))
+
+released_at = 1.0 - 30 / volume_bar.height()
+
+mouse_state.buttons = Qt.RightButton
+send(
+    volume_bar, mouse(QEvent.MouseButtonPress, volume_bar, QPoint(5, 4), Qt.RightButton)
+)
+send(
+    volume_bar,
+    mouse(
+        QEvent.MouseMove,
+        volume_bar,
+        QPoint(5, 30),
+        Qt.NoButton,
+        buttons=Qt.RightButton,
+    ),
+)
+send(
+    volume_bar,
+    mouse(
+        QEvent.MouseButtonRelease,
+        volume_bar,
+        QPoint(5, 30),
+        Qt.RightButton,
+        buttons=Qt.NoButton,
+    ),
+)
+mouse_state.buttons = Qt.NoButton
+
+c.check(
+    "a right-button drag keeps talking to the grid, not to this video",
+    len(drag_globals) == 2 and not drag_locals,
+    f"globals={drag_globals} locals={drag_locals}",
+)
+c.check(
+    "and the level it asks for last is the one it was released on",
+    drag_globals[-1] == released_at,
+    f"last={drag_globals[-1]!r} released={released_at!r}",
+)
+c.check(
+    "not the level it was pressed on",
+    drag_globals[0] != drag_globals[-1],
+)
+
+c.check(
+    "a held right button on a move is a global gesture",
+    is_global_gesture(
+        mouse(
+            QEvent.MouseMove,
+            volume_bar,
+            QPoint(5, 5),
+            Qt.NoButton,
+            buttons=Qt.RightButton,
+        )
+    ),
+)
+c.check(
+    "a held left button on a move is not",
+    not is_global_gesture(
+        mouse(
+            QEvent.MouseMove,
+            volume_bar,
+            QPoint(5, 5),
+            Qt.NoButton,
+            buttons=Qt.LeftButton,
+        )
+    ),
 )
 
 mode_locals = []
